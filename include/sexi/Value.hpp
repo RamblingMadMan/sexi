@@ -8,11 +8,13 @@
 
 namespace sexi{
 	namespace tags{
+		struct Empty{};
 		struct List{};
 		struct Id{};
 		struct Str{};
 		struct Num{};
 
+		inline constexpr Empty empty;
 		inline constexpr List list;
 		inline constexpr Id id;
 		inline constexpr Str str;
@@ -21,12 +23,21 @@ namespace sexi{
 
 	class Value;
 
-	using ValuePtr = std::unique_ptr<Value>;
+	using ValuePtr = const Value*;
 
 	class Value{
 		public:
-			Value(tags::List, std::vector<ValuePtr> elems) noexcept
-				: m_val(std::make_pair(tags::list, std::move(elems))){}
+			explicit Value(tags::Empty) noexcept
+				: m_val(std::make_pair(tags::empty, std::monostate{})){}
+
+			Value(tags::List, std::vector<std::unique_ptr<Value>> elems) noexcept{
+				if(elems.empty()){
+					m_val = std::make_pair(tags::empty, std::monostate{});
+				}
+				else{
+					m_val = std::make_pair(tags::list, std::move(elems));
+				}
+			}
 
 			Value(tags::Id, std::string id) noexcept
 				: m_val(std::make_pair(tags::id, std::move(id))){}
@@ -52,7 +63,7 @@ namespace sexi{
 				return std::visit(getSize, m_val);
 			}
 
-			const Value *operator[](const std::size_t idx) const noexcept{
+			ValuePtr operator[](const std::size_t idx) const noexcept{
 				auto getElem = [idx](auto &&tagged) -> Value*{
 					using Tag = std::remove_cv_t<std::decay_t<decltype(tagged.first)>>;
 
@@ -67,7 +78,7 @@ namespace sexi{
 				return std::visit(getElem, m_val);
 			}
 
-			const Value *at(const std::size_t idx) const noexcept{
+			ValuePtr at(const std::size_t idx) const noexcept{
 				return (*this)[idx];
 			}
 
@@ -75,7 +86,10 @@ namespace sexi{
 				auto getStr = [](auto &&tagged) -> std::string{
 					using Tag = std::remove_cv_t<std::decay_t<decltype(tagged.first)>>;
 
-					if constexpr(std::is_same_v<Tag, tags::List>){
+					if constexpr(std::is_same_v<Tag, tags::Empty>){
+						return "()";
+					}
+					else if constexpr(std::is_same_v<Tag, tags::List>){
 						std::string ret = "(";
 						if(!tagged.second.empty()){
 							ret += tagged.second[0]->toStr();
@@ -96,7 +110,8 @@ namespace sexi{
 				return std::visit(getStr, m_val);
 			}
 
-			bool isList() const noexcept{ return hasTag<tags::List>(); }
+			bool isEmpty() const noexcept{ return hasTag<tags::Empty>(); }
+			bool isList() const noexcept{ return hasTag<tags::List>() || hasTag<tags::Empty>(); }
 			bool isId() const noexcept{ return hasTag<tags::Id>(); }
 			bool isStr() const noexcept{ return hasTag<tags::Str>(); }
 			bool isNum() const noexcept{ return hasTag<tags::Num>(); }
@@ -113,7 +128,8 @@ namespace sexi{
 			}
 
 			std::variant<
-				std::pair<tags::List, std::vector<ValuePtr>>,
+				std::pair<tags::Empty, std::monostate>,
+				std::pair<tags::List, std::vector<std::unique_ptr<Value>>>,
 				std::pair<tags::Id, std::string>,
 				std::pair<tags::Str, std::string>,
 				std::pair<tags::Num, std::string>
