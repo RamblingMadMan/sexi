@@ -9,7 +9,7 @@ set(SEXI_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/include)
 set(
 	SEXI_HEADERS
 	${SEXI_INCLUDE_DIR}/sexi.h
-	${SEXI_INCLUDE_DIR}/sexi/Expr.hpp
+	${SEXI_INCLUDE_DIR}/sexi/Expr.h
 )
 
 add_subdirectory(lib)
