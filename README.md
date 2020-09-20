@@ -2,7 +2,7 @@
 
 > **WARNING**: This library is experimental and under heavy-development.
 
-Sexi is a fast, easy to use s-expression library for C++17.
+Sexi is a fast, easy to use s-expression library for C11 and C++17.
 
 ## Example
 
@@ -20,31 +20,32 @@ We can parse and read the data like so:
 ```c++
 #include <iostream>
 
-#include "sexi.hpp"
+#include "sexi.h"
 
-void printExpr(const sexi::ValuePtr &val){
-	if(expr->isList()){
-		std::cout << "List of " << val->size() << " elements: " << val->toStr() << '\n';
-		// expr->at(idx) or (*expr)[idx] for element access
+void printExpr(const sexi::Expr &expr){
+	if(expr.isList()){
+		std::cout << "List of " << expr.length() << " elements: " << expr.toStr() << '\n';
+		// expr[idx] for element access
 	}
-	else if(expr->isId()){
-		std::cout << "Id: " << expr->toStr() << '\n';
+	else if(expr.isId()){
+		std::cout << "Id: " << expr.toStr() << '\n';
 	}
-	else if(expr->isStr()){
-		std::cout << "Str: " << expr->toStr() << '\n';
-		// expr->toStr() to get the unescaped string
+	else if(expr.isStr()){
+		std::cout << "Str: " << expr.toStr() << '\n';
 	}
-	else if(expr->isNum()){
-		std::cout << "Num: " << expr->toStr() << '\n';
+	else if(expr.isNum()){
+		std::cout << "Num: " << expr.toStr() << '\n';
 	}
 	else{
 		// this should never be possible
-		std::cout << "Unknown: " << expr->toStr() << '\n';
+		std::cout << "Unknown: " << expr.toStr() << '\n';
 	}
 }
 
 int main(){
-	auto exprs = sexi::parseFile("test.se");
+    constexpr char src[] = "";
+
+	auto exprs = sexi::parse(src);
 	
 	for(auto &&expr : exprs){
 		printExpr(expr);
@@ -77,4 +78,4 @@ Num: 8
 
 - [ ] Add proper numeric types/conversions for values.
 - [ ] Handle operators/punctuation correctly.
-- [ ] Add binary s-expression parser.
+- [ ] Add binary s-expression encode/decode.

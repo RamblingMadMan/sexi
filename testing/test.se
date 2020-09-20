@@ -3,3 +3,4 @@
 (list (1 (2 (3 (4 ())))))
 (text (bold italic "Hello"))
 (math (+ (/ 1.3 2.6) (* 0.0162 569.27)))
+(set (= %0 (alloc n32)))

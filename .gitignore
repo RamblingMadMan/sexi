@@ -1,6 +1,20 @@
-# editor files
-*.backup
+# Build directories
+build
+cmake-build-*
+docs
+utils/*.h
+utils/*.hpp
+
+# Desktop/IDE related files
 CMakeLists.txt.user
+*.backup
+.vs
+.directory
+.idea
+*.autosave
+*.kdev4
+**/*.autosave
+**/*.kdev4
 
 # Prerequisites
 *.d
@@ -34,3 +48,4 @@ CMakeLists.txt.user
 *.exe
 *.out
 *.app
+ 

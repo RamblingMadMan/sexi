@@ -1,16 +1,48 @@
 #include <cstdlib>
 #include <cctype>
 
-#include <iostream>
-#include <fstream>
+#include <memory>
+#include <vector>
 
-#include "sexi.hpp"
+#include "sexi.h"
 
-using namespace sexi;
+struct SexiParseResultT{
+	bool hasError;
+	std::string_view err;
+	std::vector<SexiExpr> exprs;
+	std::vector<std::vector<SexiExpr>> storage;
+};
 
-using StrIt = std::string_view::const_iterator;
+void sexiDestroyParseResult(SexiParseResult res){
+	for(auto expr : res->exprs){
+		sexiDestroyExpr(expr);
+	}
 
-static inline std::pair<StrIt, std::unique_ptr<Value>> parseId(const StrIt beg, const StrIt end){
+	for(auto &&exprs : res->storage){
+		for(auto expr : exprs){
+			sexiDestroyExpr(expr);
+		}
+	}
+
+	std::destroy_at(res);
+	std::free(res);
+}
+
+bool sexiParseResultHasError(SexiParseResult res){ return res->hasError; }
+SexiStr sexiParseResultError(SexiParseResult res){ return { .len = res->err.size(), .ptr = res->err.data() }; }
+
+size_t sexiParseResultNumExprs(SexiParseResult res){ return res->exprs.size(); }
+const SexiExprConst *sexiParseResultExprs(SexiParseResult res){ return res->exprs.data(); }
+
+using ParseInnerResult = std::tuple<const char*, SexiExpr>;
+
+inline ParseInnerResult sexiParseError(SexiParseResult res, std::string_view msg){
+	res->hasError = true;
+	res->err = msg;
+	return std::make_tuple(nullptr, nullptr);
+}
+
+inline ParseInnerResult sexiParseId(SexiParseResult res, const char *beg, const char *end){
 	auto it = beg + 1;
 	auto delimIt = end;
 
@@ -25,21 +57,71 @@ static inline std::pair<StrIt, std::unique_ptr<Value>> parseId(const StrIt beg, 
 			break;
 		}
 		else if(!std::ispunct(*it) && !std::isalnum(*it)){
-			throw std::runtime_error("unexpected character in identifier");
+			return sexiParseError(res, "unexpected character in identifier");
 		}
 
 		++it;
 	}
 
 	if(delimIt == end){
-		throw std::runtime_error("unexpected end of source in id");
+		return sexiParseError(res, "unexpected end of source in id");
 	}
 
-	auto str = std::string(beg, delimIt);
-	return std::make_pair(it, std::make_unique<Value>(tags::id, std::move(str)));
+	SexiStr str = {
+		.len = uintptr_t(delimIt) - uintptr_t(beg),
+		.ptr = beg
+	};
+
+	auto idExpr = sexiCreateId(str);
+
+	return std::make_tuple(it, idExpr);
 }
 
-static inline std::pair<StrIt, std::unique_ptr<Value>> parseNum(const StrIt beg, const StrIt end){
+inline ParseInnerResult sexiParseStr(SexiParseResult res, const char *beg, const char *end){
+	auto it = beg + 1;
+	auto delimIt = end;
+
+	while(it != end){
+		if(*it == '"'){
+			delimIt = it;
+			++it;
+			break;
+		}
+		else if(*it == '\\'){
+			++it;
+		}
+
+		++it;
+	}
+
+	if(delimIt == end){
+		return sexiParseError(res, "unexpected end of source in string");
+	}
+
+	auto str = SexiStr{
+		.len = uintptr_t(it) - uintptr_t(beg),
+		.ptr = beg
+	};
+
+	// check delimiter
+
+	if(*it == ')'){
+		delimIt = it;
+	}
+	else if(std::isspace(*it)){
+		delimIt = it;
+		++it;
+	}
+	else{
+		return sexiParseError(res, "unexpected character in string");
+	}
+
+	auto strExpr = sexiCreateStr(str);
+
+	return std::make_tuple(it, strExpr);
+}
+
+inline ParseInnerResult sexiParseNum(SexiParseResult res, const char *beg, const char *end){
 	auto it = beg + 1;
 	auto delimIt = end;
 
@@ -60,87 +142,57 @@ static inline std::pair<StrIt, std::unique_ptr<Value>> parseNum(const StrIt beg,
 				hasDecimal = true;
 			}
 			else{
-				throw std::runtime_error("multiple decimal points in number");
+				return sexiParseError(res, "multiple decimal points in number");
 			}
 		}
 		else if(!std::isalnum(*it)){
-			throw std::runtime_error("unexpected character in number");
+			return sexiParseError(res, "unexpected character in number");
 		}
 
 		++it;
 	}
 
 	if(delimIt == end){
-		throw std::runtime_error("unexpected end of source in number");
+		return sexiParseError(res, "unexpected end of source in number");
 	}
 
-	auto str = std::string(beg, delimIt);
-	return std::make_pair(it, std::make_unique<Value>(tags::num, std::move(str)));
+	auto str = SexiStr{
+		.len = uintptr_t(delimIt) - uintptr_t(beg),
+		.ptr = beg
+	};
+
+	auto numExpr = sexiCreateNum(str);
+
+	return std::make_tuple(it, numExpr);
 }
 
-static inline std::pair<StrIt, std::unique_ptr<Value>> parseStr(const StrIt beg, const StrIt end){
+inline ParseInnerResult sexiParseList(SexiParseResult res, const char *beg, const char *end){
 	auto it = beg + 1;
 	auto delimIt = end;
 
-	// inner string parsing
-	while(it != end){
-		if(*it == '"'){
-			delimIt = it;
-			++it;
-			break;
-		}
-		else if(*it == '\\'){
-			++it;
-		}
+	std::vector<SexiExpr> elems;
 
-		++it;
-	}
-
-	if(delimIt == end){
-		throw std::runtime_error("unexpected end of source in string");
-	}
-
-	auto str = std::string(beg, it);
-
-	// check delimiter
-
-	if(*it == ')'){
-		delimIt = it;
-	}
-	else if(std::isspace(*it)){
-		delimIt = it;
-		++it;
-	}
-	else{
-		throw std::runtime_error("unexpected character  in string");
-	}
-
-	return std::make_pair(it, std::make_unique<Value>(tags::str, std::move(str)));
-}
-
-std::pair<StrIt, std::unique_ptr<Value>> parseList(const StrIt beg, const StrIt end){
-	auto it = beg + 1;
-	auto delimIt = end;
-
-	std::vector<std::unique_ptr<Value>> elems;
-
+	// most possible elements is single-character expressions separated by spaces till end of source
 	elems.reserve((std::uintptr_t(end) - std::uintptr_t(beg)) / 2);
 
-	while(it != end){
-		std::unique_ptr<Value> val;
+	SexiExpr expr = nullptr;
 
+	while(it != end){
 		if(std::isspace(*it)){
 			++it;
 			continue;
 		}
 		else if(std::isdigit(*it)){
-			std::tie(it, val) = parseNum(it, end);
+			std::tie(it, expr) = sexiParseNum(res, it, end);
+			if(!it) return std::make_tuple(it, expr);
 		}
 		else if(*it == '"'){
-			std::tie(it, val) = parseStr(it, end);
+			std::tie(it, expr) = sexiParseStr(res, it, end);
+			if(!it) return std::make_tuple(it, expr);
 		}
 		else if(*it == '('){
-			std::tie(it, val) = parseList(it, end);
+			std::tie(it, expr) = sexiParseList(res, it, end);
+			if(!it) return std::make_tuple(it, expr);
 		}
 		else if(*it == ')'){
 			delimIt = it;
@@ -148,66 +200,59 @@ std::pair<StrIt, std::unique_ptr<Value>> parseList(const StrIt beg, const StrIt 
 			break;
 		}
 		else if(std::ispunct(*it) || std::isalpha(*it)){
-			std::tie(it, val) = parseId(it, end);
+			std::tie(it, expr) = sexiParseId(res, it, end);
+			if(!it) return std::make_tuple(it, expr);
 		}
 		else{
-			throw std::runtime_error("unexpected token in list");
+			for(auto elem : elems){ sexiDestroyExpr(elem); }
+			return sexiParseError(res, "unexpected token in list");
 		}
 
-		elems.emplace_back(std::move(val));
+		elems.emplace_back(expr);
 	}
 
 	if(delimIt == end){
-		throw std::runtime_error("unexpected end of source in list");
+		for(auto elem : elems){ sexiDestroyExpr(elem); }
+		return sexiParseError(res, "unexpected end of source in list");
 	}
 
-	return std::make_pair(it, std::make_unique<Value>(tags::list, std::move(elems)));
+	auto &&elemVec = res->storage.emplace_back(std::move(elems));
+
+	auto listExpr = sexiCreateList(elemVec.size(), elemVec.data());
+
+	return std::make_tuple(it, listExpr);
 }
 
-std::vector<std::unique_ptr<sexi::Value>> sexi::parse(std::string_view src){
-	std::vector<std::unique_ptr<Value>> ret;
+SexiParseResult sexiParse(size_t len, const char *ptr){
+	auto mem = std::malloc(sizeof(SexiParseResultT));
+	if(!mem) return nullptr;
 
-	auto beg = cbegin(src);
-	auto end = cend(src);
-	auto it = beg;
+	auto ret = new(mem) SexiParseResultT;
+	ret->hasError = false;
+
+	const char *it = ptr;
+	const char *end = ptr + len;
+
+	SexiExpr expr = nullptr;
 
 	while(it != end){
-		std::unique_ptr<Value> val;
-
 		if(*it == '('){
 			// parse a list
-			std::tie(it, val) = parseList(it, end);
+			std::tie(it, expr) = sexiParseList(ret, it, end);
+			if(!it) return ret;
 		}
 		else if(std::isspace(*it)){
 			++it;
 			continue;
 		}
 		else{
-			std::cerr << "Unexpected token at top level\n";
+			ret->hasError = true;
+			ret->err = "unexpected token at top level";
 			return ret;
 		}
 
-		ret.emplace_back(std::move(val));
+		ret->exprs.emplace_back(expr);
 	}
 
 	return ret;
-}
-
-std::vector<std::unique_ptr<Value>> sexi::parseFile(const std::filesystem::path &p){
-	if(!std::filesystem::exists(p)) throw std::runtime_error("path does not exist");
-	else if(!std::filesystem::is_regular_file(p)) throw std::runtime_error("path is not to a regular file");
-
-	std::string src;
-
-	{
-		auto file = std::ifstream(p);
-
-		std::string tmp;
-
-		while(std::getline(file, tmp)){
-			src += tmp + '\n';
-		}
-	}
-
-	return parse(src);
 }
