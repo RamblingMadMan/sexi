@@ -5,7 +5,7 @@
 #include <string>
 #include <memory>
 
-#include "sexi/Expr.hpp"
+#include "sexi/Expr.h"
 
 struct SexiExprT{
 	SexiExprType type;

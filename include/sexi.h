@@ -1,7 +1,7 @@
 #ifndef SEXI_SEXI_H
 #define SEXI_SEXI_H 1
 
-#include "sexi/Expr.hpp"
+#include "sexi/Expr.h"
 
 /**
  * @defgroup Parsing Parsing

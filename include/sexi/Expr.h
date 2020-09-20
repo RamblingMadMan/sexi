@@ -1,5 +1,5 @@
-#ifndef SEXI_EXPR_HPP
-#define SEXI_EXPR_HPP 1
+#ifndef SEXI_EXPR_H
+#define SEXI_EXPR_H 1
 
 /**
  * @defgroup Exprs Expressions
@@ -284,4 +284,4 @@ namespace sexi{
  * @}
  */
 
-#endif // !SEXI_EXPR_HPP
+#endif // !SEXI_EXPR_H
