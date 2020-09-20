@@ -23,33 +23,37 @@ We can parse and read the data like so:
 #include "sexi.h"
 
 void printExpr(const sexi::Expr &expr){
-	if(expr.isList()){
-		std::cout << "List of " << expr.length() << " elements: " << expr.toStr() << '\n';
-		// expr[idx] for element access
-	}
-	else if(expr.isId()){
-		std::cout << "Id: " << expr.toStr() << '\n';
-	}
-	else if(expr.isStr()){
-		std::cout << "Str: " << expr.toStr() << '\n';
-	}
-	else if(expr.isNum()){
-		std::cout << "Num: " << expr.toStr() << '\n';
-	}
-	else{
-		// this should never be possible
-		std::cout << "Unknown: " << expr.toStr() << '\n';
-	}
+    if(expr.isList()){
+        std::cout << "List of " << expr.length() << " elements: " << expr.toStr() << '\n';
+        // expr[idx] for element access
+    }
+    else if(expr.isId()){
+        std::cout << "Id: " << expr.toStr() << '\n';
+    }
+    else if(expr.isStr()){
+        std::cout << "Str: " << expr.toStr() << '\n';
+    }
+    else if(expr.isNum()){
+        std::cout << "Num: " << expr.toStr() << '\n';
+    }
+    else if(expr.isEmpty()){
+        std::cout << "Empty: ()\n";
+    }
+    else{
+        // this should never be possible
+        std::cout << "Unknown: " << expr.toStr() << '\n';
+    }
 }
 
 int main(){
-    constexpr char src[] = "";
-
-	auto exprs = sexi::parse(src);
+    constexpr char src[] = "(my (test \"source\") 1)";
+    
+    // 'src' must stay alive for life of 'exprs'
+    auto exprs = sexi::parse(src);
 	
-	for(auto &&expr : exprs){
-		printExpr(expr);
-	}
+    for(auto &&expr : exprs){
+        printExpr(expr);
+    }
 }
 ```
 

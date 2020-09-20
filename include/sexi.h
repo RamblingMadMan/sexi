@@ -3,20 +3,61 @@
 
 #include "sexi/Expr.hpp"
 
+/**
+ * @defgroup Parsing Parsing
+ * @{
+ */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/**
+ * @brief Opaque type representing result of parsing.
+ */
 typedef struct SexiParseResultT *SexiParseResult;
 
+/**
+ * @brief Parse s-expressions from a string.
+ * @param len length of the string
+ * @param ptr pointer to the string
+ * @returns newly created parse result
+ * @see sexiDestroyParseResult
+ */
 SexiParseResult sexiParse(size_t len, const char *ptr);
 
+/**
+ * @brief Destroy a parse result created by \ref sexiParse .
+ * @param res result to destroy
+ */
 void sexiDestroyParseResult(SexiParseResult res);
 
+/**
+ * @brief Check if a parse result contains an error
+ * @param res result to check
+ * @returns whether the result contains an error
+ */
 bool sexiParseResultHasError(SexiParseResult res);
+
+/**
+ * @brief Get the error string from a parse result.
+ * @param res result to query
+ * @returns error string or a `NULL` string of 0 length
+ */
 SexiStr sexiParseResultError(SexiParseResult res);
 
+/**
+ * @brief Get the number of expressions in a parse result.
+ * @param res result to check
+ * @returns number of expressions in the result
+ */
 size_t sexiParseResultNumExprs(SexiParseResult res);
+
+/**
+ * @brief Get the expressions from a parse result.
+ * @param res result to query
+ * @returns pointer to the expressions contained in result or `NULL`
+ */
 const SexiExprConst *sexiParseResultExprs(SexiParseResult res);
 
 #ifdef __cplusplus
@@ -71,5 +112,9 @@ namespace sexi{
 	}
 }
 #endif // __cplusplus
+
+/**
+ * @}
+ */
 
 #endif // !SEXI_SEXI_H
