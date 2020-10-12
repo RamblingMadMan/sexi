@@ -184,6 +184,8 @@ namespace sexi{
 	inline constexpr TypeTag<SEXI_STR> str;
 	inline constexpr TypeTag<SEXI_NUM> num;
 
+	class ExprIter;
+
 	class Expr{
 		public:
 			Expr(SexiExprConst expr_)
@@ -270,6 +272,9 @@ namespace sexi{
 			bool isStr() const noexcept{ return sexiExprIsStr(m_expr); }
 			bool isNum() const noexcept{ return sexiExprIsNum(m_expr); }
 
+			ExprIter begin() const noexcept;
+			ExprIter end() const noexcept;
+
 		private:
 			bool m_ownsExpr;
 			union{
@@ -277,6 +282,36 @@ namespace sexi{
 				SexiExpr m_owned;
 			};
 	};
+
+	class ExprIter{
+		public:
+			ExprIter &operator++() noexcept{
+				++m_idx;
+				return *this;
+			}
+
+			bool operator!=(const ExprIter &other) const noexcept{
+				return (m_expr != other.m_expr) || (m_idx != other.m_idx);
+			}
+
+			bool operator==(const ExprIter &other) const noexcept{
+				return (m_expr == other.m_expr) && (m_idx == other.m_idx);
+			}
+
+			Expr operator*() const noexcept{ return m_expr[m_idx]; }
+
+		private:
+			ExprIter(Expr expr, std::size_t idx) noexcept
+					: m_expr(expr), m_idx(idx){}
+
+			Expr m_expr;
+			std::size_t m_idx;
+
+			friend class Expr;
+	};
+
+	ExprIter Expr::begin() const noexcept{ return ExprIter(*this, 0); }
+	ExprIter Expr::end() const noexcept{ return ExprIter(*this, length()); }
 }
 #endif // __cplusplus
 
