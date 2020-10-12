@@ -310,8 +310,8 @@ namespace sexi{
 			friend class Expr;
 	};
 
-	ExprIter Expr::begin() const noexcept{ return ExprIter(*this, 0); }
-	ExprIter Expr::end() const noexcept{ return ExprIter(*this, length()); }
+	inline ExprIter Expr::begin() const noexcept{ return ExprIter(*this, 0); }
+	inline ExprIter Expr::end() const noexcept{ return ExprIter(*this, length()); }
 }
 #endif // __cplusplus
 
