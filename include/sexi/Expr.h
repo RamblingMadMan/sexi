@@ -42,7 +42,7 @@ typedef struct {
  * @param owned owned string to reference
  * @returns view of owned string
  */
-inline SexiStr sexiRefOwnedStr(SexiOwnedStr owned){
+inline SexiStr sexiRefStr(SexiOwnedStr owned){
 	return { .len = owned.len, .ptr = owned.ptr };
 }
 
@@ -61,6 +61,13 @@ typedef const struct SexiExprT *SexiExprConst;
  * @param expr
  */
 void sexiDestroyExpr(SexiExpr expr);
+
+/**
+ * @brief Create a copy of an expression.
+ * @param expr expression to copy
+ * @returns newly created expression
+ */
+SexiExpr sexiCloneExpr(SexiExprConst expr);
 
 /**
  * @brief Create an empty expression.
@@ -155,6 +162,12 @@ SexiStr sexiExprToStr(SexiExprConst expr);
 size_t sexiExprLength(SexiExprConst expr);
 
 /**
+ * @brief Set the expression as having a copy of the referenced expression string.
+ * @param expr expression to modify
+ */
+void sexiExprOwnString(SexiExpr expr);
+
+/**
  * @brief Get an element of a list expression
  * @param list list expression to query
  * @param idx index of the list element
@@ -165,7 +178,9 @@ SexiExprConst sexiExprAt(SexiExprConst list, size_t idx);
 #ifdef __cplusplus
 }
 
+#include <vector>
 #include <string_view>
+#include <string>
 
 inline bool operator==(const std::string_view &lhs, const SexiStr &rhs) noexcept{
 	return lhs == std::string_view(rhs.ptr, rhs.len);
@@ -188,26 +203,107 @@ namespace sexi{
 
 	class Expr{
 		public:
-			Expr(SexiExprConst expr_)
-				: m_ownsExpr(false), m_expr(expr_){}
+			Expr(SexiExprConst expr_, bool makeClone = true)
+				: m_ownsExpr(makeClone), m_expr(makeClone ? sexiCloneExpr(expr_) : expr_){}
 
-			explicit Expr(TypeTag<SEXI_EMPTY>) noexcept
+			explicit Expr(TypeTag<SEXI_EMPTY> = empty) noexcept
 				: m_ownsExpr(true), m_owned(sexiCreateEmpty()){}
 
 			Expr(TypeTag<SEXI_LIST>, size_t n, SexiExprConst *exprs) noexcept
 				: m_ownsExpr(true), m_owned(sexiCreateList(n, exprs)){}
 
-			Expr(TypeTag<SEXI_ID>, std::string_view str) noexcept
-				: m_ownsExpr(true), m_owned(sexiCreateId({ .len = str.size(), .ptr = str.data() })){}
+			Expr(TypeTag<SEXI_LIST>, std::vector<Expr> &&others) = delete;
 
-			Expr(TypeTag<SEXI_STR>, std::string_view str) noexcept
-				: m_ownsExpr(true), m_owned(sexiCreateStr({ .len = str.size(), .ptr = str.data() })){}
+			Expr(TypeTag<SEXI_LIST>, const std::vector<Expr> &others) noexcept
+				: m_ownsExpr(true), m_owned(nullptr)
+			{
+				std::vector<SexiExprConst> exprs;
+				exprs.reserve(others.size());
 
-			Expr(TypeTag<SEXI_NUM>, std::string_view str) noexcept
-				: m_ownsExpr(true), m_owned(sexiCreateNum({ .len = str.size(), .ptr = str.data() })){}
+				for(auto &&other : others){
+					exprs.emplace_back(other.m_expr);
+				}
+
+				m_owned = sexiCreateList(exprs.size(), exprs.data());
+			}
+
+			Expr(TypeTag<SEXI_ID>, std::string_view str, bool copyStr = true) noexcept
+				: m_ownsExpr(true), m_owned(sexiCreateId({ .len = str.size(), .ptr = str.data() }))
+			{
+				if(copyStr) sexiExprOwnString(m_owned);
+			}
+
+			Expr(TypeTag<SEXI_STR>, std::string_view str, bool copyStr = true) noexcept
+				: m_ownsExpr(true), m_owned(sexiCreateStr({ .len = str.size(), .ptr = str.data() }))
+			{
+				if(copyStr) sexiExprOwnString(m_owned);
+			}
+
+			Expr(TypeTag<SEXI_NUM>, std::string_view str, bool copyStr = true) noexcept
+				: m_ownsExpr(true), m_owned(sexiCreateNum({ .len = str.size(), .ptr = str.data() }))
+			{
+				if(copyStr) sexiExprOwnString(m_owned);
+			}
+
+			Expr(TypeTag<SEXI_NUM>, int val) noexcept
+				: m_ownsExpr(true), m_owned(nullptr)
+			{
+				auto str = std::to_string(val);
+				m_owned = sexiCreateNum({ .len = str.size(), .ptr = str.data() });
+				sexiExprOwnString(m_owned);
+			}
+
+			Expr(TypeTag<SEXI_NUM>, unsigned long long val) noexcept
+				: m_ownsExpr(true), m_owned(nullptr)
+			{
+				auto str = std::to_string(val);
+				m_owned = sexiCreateNum({ .len = str.size(), .ptr = str.data() });
+				sexiExprOwnString(m_owned);
+			}
+
+			Expr(TypeTag<SEXI_NUM>, long double val) noexcept
+				: m_ownsExpr(true), m_owned(nullptr)
+			{
+				auto str = std::to_string(val);
+				m_owned = sexiCreateNum({ .len = str.size(), .ptr = str.data() });
+				sexiExprOwnString(m_owned);
+			}
+
+			explicit Expr(std::string_view str, bool copyStr = true) noexcept
+			{
+				m_ownsExpr = true;
+				if(
+					str.find_first_of(" \t\n") != std::string_view::npos ||
+					(str.front() == '"' && str.back() == '"')
+				){
+					m_owned = sexiCreateStr({ str.size(), str.data() });
+				}
+				else{
+					m_owned = sexiCreateId({ str.size(), str.data() });
+				}
+
+				if(copyStr) sexiExprOwnString(m_owned);
+			}
+
+			explicit Expr(int val) noexcept
+				: Expr(num, val){}
+
+			explicit Expr(unsigned long long val) noexcept
+				: Expr(num, val){}
+
+			explicit Expr(long double val) noexcept
+				: Expr(num, val){}
+
+			explicit Expr(double val) noexcept
+				: Expr(num, (long double)val){}
+
+			/*
+			explicit Expr(bool val) noexcept
+				: Expr(sexi::id, val ? "true" : "false"){}
+			*/
 
 			Expr(const Expr &other) noexcept
-				: m_ownsExpr(false), m_expr(other.m_expr){}
+				: m_ownsExpr(true), m_expr(sexiCloneExpr(other.m_expr)){}
 
 			Expr(Expr &&other) noexcept
 				: m_ownsExpr(other.m_ownsExpr), m_expr(other.m_expr)
@@ -222,8 +318,8 @@ namespace sexi{
 						sexiDestroyExpr(m_owned);
 					}
 
-					m_expr = other.m_expr;
-					m_ownsExpr = false;
+					m_expr = sexiCloneExpr(other.m_expr);
+					m_ownsExpr = true;
 				}
 
 				return *this;
@@ -261,10 +357,12 @@ namespace sexi{
 				return sexiExprAt(m_expr, idx);
 			}
 
-			std::string_view toStr() const noexcept{
+			std::string toStr() const noexcept{
 				auto str = sexiExprToStr(m_expr);
-				return std::string_view(str.ptr, str.len);
+				return std::string(str.ptr, str.len);
 			}
+
+			std::vector<Expr> toList() const noexcept;
 
 			bool isEmpty() const noexcept{ return sexiExprIsEmpty(m_expr); }
 			bool isList() const noexcept{ return sexiExprIsList(m_expr); }
@@ -313,6 +411,35 @@ namespace sexi{
 	inline ExprIter Expr::begin() const noexcept{ return ExprIter(*this, 0); }
 	inline ExprIter Expr::end() const noexcept{ return ExprIter(*this, length()); }
 }
+
+namespace sexi::operators{
+	inline Expr operator<<(const Expr &lhs, const Expr &rhs){
+		if(lhs.isList()){
+			std::vector<Expr> exprs = lhs.toList();
+			exprs.emplace_back(rhs);
+			return Expr(list, exprs);
+		}
+		else{
+			std::vector<Expr> exprs = { lhs, rhs };
+			return Expr(list, exprs);
+		}
+	}
+
+	template<typename T>
+	inline Expr operator<<(const Expr &lhs, T &&val){
+		if(lhs.isList()){
+			std::vector<Expr> exprs = lhs.toList();
+			exprs.emplace_back(Expr(std::forward<T>(val)));
+			return Expr(list, exprs);
+		}
+		else{
+			std::vector<Expr> exprs = { lhs, Expr(std::forward<T>(val)) };
+			return Expr(list, exprs);
+		}
+	}
+}
+
+using namespace sexi::operators;
 #endif // __cplusplus
 
 /**

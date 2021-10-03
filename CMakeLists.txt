@@ -7,9 +7,19 @@ set(CMAKE_CXX_STANDARD 17)
 set(SEXI_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/include)
 
 set(
-	SEXI_HEADERS
+	SEXI_CPP_HEADERS
+	${SEXI_INCLUDE_DIR}/sexi/literals.hpp
+)
+
+set(
+	SEXI_C_HEADERS
 	${SEXI_INCLUDE_DIR}/sexi.h
 	${SEXI_INCLUDE_DIR}/sexi/Expr.h
+)
+
+set(
+	SEXI_HEADERS
+	${SEXI_C_HEADERS} ${SEXI_CPP_HEADERS}
 )
 
 add_subdirectory(lib)

@@ -21,10 +21,11 @@ typedef struct SexiParseResultT *SexiParseResult;
  * @brief Parse s-expressions from a string.
  * @param len length of the string
  * @param ptr pointer to the string
+ * @param copyStrs whether to make copies of refed strings
  * @returns newly created parse result
  * @see sexiDestroyParseResult
  */
-SexiParseResult sexiParse(size_t len, const char *ptr);
+SexiParseResult sexiParse(size_t len, const char *ptr, bool copyStrs);
 
 /**
  * @brief Destroy a parse result created by \ref sexiParse .
@@ -63,6 +64,7 @@ const SexiExprConst *sexiParseResultExprs(SexiParseResult res);
 #ifdef __cplusplus
 }
 
+#include <vector>
 #include <string_view>
 
 namespace sexi{
@@ -87,6 +89,8 @@ namespace sexi{
 			auto begin() const noexcept{ return cbegin(m_exprs); }
 			auto end() const noexcept{ return cend(m_exprs); }
 
+			const std::vector<Expr> &exprs() const noexcept{ return m_exprs; }
+
 		private:
 			explicit ParseResult(SexiParseResult res_) noexcept
 				: m_res(res_)
@@ -103,11 +107,11 @@ namespace sexi{
 			SexiParseResult m_res;
 			std::vector<Expr> m_exprs;
 
-			friend ParseResult parse(std::string_view);
+			friend ParseResult parse(std::string_view, bool);
 	};
 
-	inline ParseResult parse(std::string_view src){
-		auto res = sexiParse(src.size(), src.data());
+	inline ParseResult parse(std::string_view src, bool copyStrs = true){
+		auto res = sexiParse(src.size(), src.data(), copyStrs);
 		return ParseResult(res);
 	}
 }

@@ -7,20 +7,38 @@
 
 #include "sexi/Expr.h"
 
+using namespace sexi;
+
 struct SexiExprT{
 	SexiExprType type;
 	union {
 		SexiStr str;
 		struct {
 			size_t n;
-			const SexiExprConst *exprs;
+			SexiExpr *exprs;
 		} list;
 	};
 	SexiOwnedStr ownedStr;
 };
 
+std::vector<Expr> Expr::toList() const noexcept{
+	if(!isList()) return { *this };
+
+	std::vector<Expr> ret;
+	ret.reserve(m_expr->list.n);
+
+	for(std::size_t i = 0; i < m_expr->list.n; i++){
+		ret.emplace_back(m_expr->list.exprs[i]);
+	}
+
+	return ret;
+}
+
 void sexiDestroyExpr(SexiExpr expr){
-	if(expr->ownedStr.ptr){
+	if(sexiExprIsList(expr)){
+		std::free(expr->list.exprs);
+	}
+	else if(expr->ownedStr.ptr){
 		std::free(expr->ownedStr.ptr);
 	}
 
@@ -35,6 +53,8 @@ static inline SexiExpr allocExpr(SexiExprType type){
 	ret->type = type;
 	ret->ownedStr.len = 0;
 	ret->ownedStr.ptr = nullptr;
+	ret->list.n = 0;
+	ret->list.exprs = nullptr;
 	return ret;
 }
 
@@ -44,11 +64,37 @@ SexiExpr sexiCreateEmpty(){
 	return ret;
 }
 
+SexiExpr sexiCloneExpr(SexiExprConst expr){
+	if(!expr) return nullptr;
+
+	if(sexiExprIsList(expr)){
+		return sexiCreateList(expr->list.n, expr->list.exprs);
+	}
+
+	auto ret = allocExpr(expr->type);
+	ret->str = expr->str;
+
+	sexiExprOwnString(ret);
+
+	return ret;
+}
+
 SexiExpr sexiCreateList(size_t n, const SexiExprConst *exprs){
 	if(n == 0) return sexiCreateEmpty();
 
 	auto ret = allocExpr(SEXI_LIST);
-	ret->list = { .n = n, .exprs = exprs };
+
+	SexiExpr *newList = (SexiExpr*)std::malloc(sizeof(SexiExpr) * n);
+
+	for(std::size_t i = 0; i < n; i++){
+		newList[i] = sexiCloneExpr(exprs[i]);
+
+		if(!sexiExprIsList(newList[i])){
+			sexiExprOwnString(newList[i]);
+		}
+	}
+
+	ret->list = { .n = n, .exprs = newList };
 	return ret;
 }
 
@@ -66,7 +112,17 @@ SexiExpr sexiCreateStr(SexiStr str){
 
 SexiExpr sexiCreateNum(SexiStr str){
 	auto ret = allocExpr(SEXI_NUM);
-	ret->str = str;
+
+	auto strView = std::string_view(str.ptr, str.len);
+
+	if(strView.find('.') != std::string_view::npos){
+		auto strEnd = strView.find_last_not_of("0");
+		auto numStr = strView.substr(0, strEnd + 1);
+
+		str.len = numStr.size();
+	}
+
+	ret->str = { .len = str.len, .ptr = str.ptr };
 	return ret;
 }
 
@@ -90,14 +146,17 @@ static inline void sexiAllocListStr(SexiExpr list){
 
 	ret += ")";
 
-	auto chars = new char[ret.size()];
+	auto chars = (char*)std::malloc(ret.size() + 1);
 	std::memcpy(chars, ret.data(), ret.size());
+	chars[ret.size()] = '\0';
 
 	list->ownedStr.len = ret.size();
 	list->ownedStr.ptr = chars;
 }
 
 SexiStr sexiExprToStr(SexiExprConst expr){
+	if(expr->ownedStr.ptr) return sexiRefStr(expr->ownedStr);
+
 	switch(expr->type){
 		case SEXI_ID:
 		case SEXI_STR:
@@ -105,13 +164,11 @@ SexiStr sexiExprToStr(SexiExprConst expr){
 			return expr->str;
 
 		case SEXI_LIST:{
-			if(!expr->ownedStr.ptr){
-				// TODO: create work-around const_cast
-				// possibly allocate string on creation
-				sexiAllocListStr(const_cast<SexiExpr>(expr)); // ewww const_cast
-			}
+			// TODO: create work-around const_cast
+			// possibly allocate string on creation
+			sexiAllocListStr(const_cast<SexiExpr>(expr)); // ewww const_cast
 
-			return sexiRefOwnedStr(expr->ownedStr);
+			return sexiRefStr(expr->ownedStr);
 		}
 
 		case SEXI_EMPTY:{
@@ -131,6 +188,18 @@ size_t sexiExprLength(SexiExprConst expr){
 		case SEXI_EMPTY: return 0;
 		default: return 1;
 	}
+}
+
+void sexiExprOwnString(SexiExpr expr){
+	if(sexiExprIsEmpty(expr) || expr->ownedStr.ptr) return;
+
+	expr->ownedStr.len = expr->str.len;
+	expr->ownedStr.ptr = (char*)std::malloc(expr->str.len + 1);
+
+	std::memcpy(expr->ownedStr.ptr, expr->str.ptr, expr->str.len);
+	expr->ownedStr.ptr[expr->str.len] = '\0'; // null terminate string
+
+	expr->str.ptr = expr->ownedStr.ptr;
 }
 
 SexiExprConst sexiExprAt(SexiExprConst list, size_t idx){

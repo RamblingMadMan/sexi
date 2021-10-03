@@ -42,7 +42,7 @@ inline ParseInnerResult sexiParseError(SexiParseResult res, std::string_view msg
 	return std::make_tuple(nullptr, nullptr);
 }
 
-inline ParseInnerResult sexiParseId(SexiParseResult res, const char *beg, const char *end){
+inline ParseInnerResult sexiParseId(SexiParseResult res, const char *beg, const char *end, bool copyStrs){
 	auto it = beg + 1;
 	auto delimIt = end;
 
@@ -73,11 +73,12 @@ inline ParseInnerResult sexiParseId(SexiParseResult res, const char *beg, const 
 	};
 
 	auto idExpr = sexiCreateId(str);
+	if(copyStrs) sexiExprOwnString(idExpr);
 
 	return std::make_tuple(it, idExpr);
 }
 
-inline ParseInnerResult sexiParseStr(SexiParseResult res, const char *beg, const char *end){
+inline ParseInnerResult sexiParseStr(SexiParseResult res, const char *beg, const char *end, bool copyStrs){
 	auto it = beg + 1;
 	auto delimIt = end;
 
@@ -117,11 +118,12 @@ inline ParseInnerResult sexiParseStr(SexiParseResult res, const char *beg, const
 	}
 
 	auto strExpr = sexiCreateStr(str);
+	if(copyStrs) sexiExprOwnString(strExpr);
 
 	return std::make_tuple(it, strExpr);
 }
 
-inline ParseInnerResult sexiParseNum(SexiParseResult res, const char *beg, const char *end){
+inline ParseInnerResult sexiParseNum(SexiParseResult res, const char *beg, const char *end, bool copyStrs){
 	auto it = beg + 1;
 	auto delimIt = end;
 
@@ -162,11 +164,12 @@ inline ParseInnerResult sexiParseNum(SexiParseResult res, const char *beg, const
 	};
 
 	auto numExpr = sexiCreateNum(str);
+	if(copyStrs) sexiExprOwnString(numExpr);
 
 	return std::make_tuple(it, numExpr);
 }
 
-inline ParseInnerResult sexiParseList(SexiParseResult res, const char *beg, const char *end){
+inline ParseInnerResult sexiParseList(SexiParseResult res, const char *beg, const char *end, bool copyStrs){
 	auto it = beg + 1;
 	auto delimIt = end;
 
@@ -183,15 +186,15 @@ inline ParseInnerResult sexiParseList(SexiParseResult res, const char *beg, cons
 			continue;
 		}
 		else if(std::isdigit(*it)){
-			std::tie(it, expr) = sexiParseNum(res, it, end);
+			std::tie(it, expr) = sexiParseNum(res, it, end, copyStrs);
 			if(!it) return std::make_tuple(it, expr);
 		}
 		else if(*it == '"'){
-			std::tie(it, expr) = sexiParseStr(res, it, end);
+			std::tie(it, expr) = sexiParseStr(res, it, end, copyStrs);
 			if(!it) return std::make_tuple(it, expr);
 		}
 		else if(*it == '('){
-			std::tie(it, expr) = sexiParseList(res, it, end);
+			std::tie(it, expr) = sexiParseList(res, it, end, copyStrs);
 			if(!it) return std::make_tuple(it, expr);
 		}
 		else if(*it == ')'){
@@ -200,7 +203,7 @@ inline ParseInnerResult sexiParseList(SexiParseResult res, const char *beg, cons
 			break;
 		}
 		else if(std::ispunct(*it) || std::isalpha(*it)){
-			std::tie(it, expr) = sexiParseId(res, it, end);
+			std::tie(it, expr) = sexiParseId(res, it, end, copyStrs);
 			if(!it) return std::make_tuple(it, expr);
 		}
 		else{
@@ -223,7 +226,7 @@ inline ParseInnerResult sexiParseList(SexiParseResult res, const char *beg, cons
 	return std::make_tuple(it, listExpr);
 }
 
-SexiParseResult sexiParse(size_t len, const char *ptr){
+SexiParseResult sexiParse(size_t len, const char *ptr, bool copyStrs){
 	auto mem = std::malloc(sizeof(SexiParseResultT));
 	if(!mem) return nullptr;
 
@@ -238,7 +241,7 @@ SexiParseResult sexiParse(size_t len, const char *ptr){
 	while(it != end){
 		if(*it == '('){
 			// parse a list
-			std::tie(it, expr) = sexiParseList(ret, it, end);
+			std::tie(it, expr) = sexiParseList(ret, it, end, copyStrs);
 			if(!it) return ret;
 		}
 		else if(std::isspace(*it)){

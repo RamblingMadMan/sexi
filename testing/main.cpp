@@ -4,13 +4,31 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 #include "sexi.h"
+#include "sexi/literals.hpp"
 
+using namespace sexi;
+using namespace sexi::literals;
+
+template<typename T, typename U>
+static inline void expect(T &&value, U &&expected){
+	if(value != expected){
+		std::ostringstream stream;
+		stream << "expected (" << expected << ") got (" << value << ")\n";
+		throw std::runtime_error(stream.str());
+	}
+}
+
+// empty expression:
+// ()
 void testEmpty(const sexi::Expr &v){
 	assert(v.isEmpty());
 }
 
+// array expression:
+// (1 2 3 4)
 void testArray(const sexi::Expr &v){
 	assert(v.isList());
 	assert(v.length() == 4);
@@ -20,8 +38,10 @@ void testArray(const sexi::Expr &v){
 	assert(v[3].toStr() == "4");
 }
 
+// list expression:
+// (1 (2 (3 (4 ()))))
 void testList(const sexi::Expr &v){
-	std::vector<std::string_view> parsedElements;
+	std::vector<std::string> parsedElements;
 	parsedElements.reserve(4);
 
 	sexi::Expr element = v;
@@ -47,6 +67,8 @@ void testList(const sexi::Expr &v){
 	assert(parsedElements[3] == "4");
 }
 
+// text expression:
+// (bold italic "Hello")
 void testText(const sexi::Expr &v){
 	assert(v.isList());
 	assert(v.length() == 3);
@@ -58,6 +80,8 @@ void testText(const sexi::Expr &v){
 	assert(v[2].toStr() == "\"Hello\"");
 }
 
+// math expression:
+// (+ (/ 1.3 2.6) (* 0.0162 569.27))
 void testMath(const sexi::Expr &v){
 	assert(v.isList());
 	assert(v.length() == 3);
@@ -71,7 +95,8 @@ void testMath(const sexi::Expr &v){
 	assert(head[0].toStr() == "/");
 
 	assert(head[1].isNum());
-	assert(head[1].toStr() == "1.3");
+	expect(head[1].toStr(), "1.3");
+	//assert(head[1].toStr() == "1.3");
 	assert(head[2].isNum());
 	assert(head[2].toStr() == "2.6");
 
@@ -88,6 +113,8 @@ void testMath(const sexi::Expr &v){
 	assert(last[2].toStr() == "569.27");
 }
 
+// set expression:
+// (= %0 (alloc n32))
 void testSet(const sexi::Expr &v){
 	assert(v.isList());
 	assert(v.length() == 3);
@@ -105,6 +132,38 @@ void testSet(const sexi::Expr &v){
 	assert(last[0].toStr() == "alloc");
 	assert(last[1].isId());
 	assert(last[1].toStr() == "n32");
+}
+
+void testOperators(){
+	auto emptyExpr = ""_se;
+
+	testEmpty(emptyExpr);
+
+	auto arrayExpr = (1_se << 2 << 3 << 4);
+
+	testArray(arrayExpr);
+
+	auto listExpr =
+		(1_se << (2_se << (3_se << (4_se << (""_se)))));
+
+	testList(listExpr);
+
+	auto textExpr =
+		("bold"_se << "italic" << "\"Hello\"");
+
+	testText(textExpr);
+
+	auto mathExpr =
+		("+"_se <<
+			("/"_se << 1.3 << 2.6) <<
+			("*"_se << 0.0162 << 569.27));
+
+	testMath(mathExpr);
+
+	auto setExpr =
+		("="_se << "%0" << ("alloc"_se << "n32"));
+
+	testSet(setExpr);
 }
 
 int main(int argc, char *argv[]){
@@ -166,6 +225,8 @@ int main(int argc, char *argv[]){
 
 		testFn(testExpr);
 	}
+
+	testOperators();
 
 	std::cout << "All tests passed\n";
 

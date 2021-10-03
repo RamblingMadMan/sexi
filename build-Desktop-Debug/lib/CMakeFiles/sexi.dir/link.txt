@@ -1,0 +1,1 @@
+/usr/bin/g++ -fPIC -g  -shared -Wl,-soname,libsexi.so -o libsexi.so CMakeFiles/sexi.dir/parse.cpp.o CMakeFiles/sexi.dir/Expr.cpp.o 
